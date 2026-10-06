@@ -1,0 +1,16 @@
+{
+  "name": "哦哦啊啊",
+  "short_name": "哦哦啊啊",
+  "description": "和 TA 绑定私密空间：呼叫、分享、日记、情话打卡；还有全网可见的广场",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fff1f2",
+  "theme_color": "#f43f5e",
+  "icons": [
+    { "src": "./icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

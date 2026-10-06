@@ -1,0 +1,9 @@
+node_modules/
+dist/
+server/data.json
+server/state.json
+server/vapid.json
+server/push-subs.json
+公网地址.txt
+tools/
+*.log
