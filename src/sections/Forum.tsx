@@ -24,8 +24,15 @@ export default function Forum({ me }: Props) {
   const [photo, setPhoto] = useState<string | null>(null)
   const [openComments, setOpenComments] = useState<string | null>(null)
   const [commentText, setCommentText] = useState('')
+  const [menuFor, setMenuFor] = useState<string | null>(null)
+  const [toast, setToast] = useState('')
   const [busy, setBusy] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  const showToast = (t: string) => {
+    setToast(t)
+    window.setTimeout(() => setToast(''), 2500)
+  }
 
   const load = useCallback(async () => {
     try {
@@ -78,6 +85,45 @@ export default function Forum({ me }: Props) {
       await load()
     } catch {
       /* ignore */
+    }
+  }
+
+  const report = async (p: Post) => {
+    const reason = window.prompt('举报原因（如：不当言论、骚扰、广告）', '不当言论')
+    if (reason === null) return
+    setMenuFor(null)
+    try {
+      const res = await api<{ message: string }>('/api/posts/report', {
+        method: 'POST',
+        body: { id: p.id, reason: reason.trim() || '不当言论' },
+      })
+      showToast(res.message || '已举报')
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : '举报失败')
+    }
+  }
+
+  const block = async (p: Post) => {
+    if (!window.confirm(`拉黑「${p.authorName}」？之后你们互相看不到对方的帖子。`)) return
+    setMenuFor(null)
+    try {
+      await api('/api/user/block', { method: 'POST', body: { userId: p.authorId } })
+      showToast(`已拉黑 ${p.authorName}`)
+      await load()
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : '操作失败')
+    }
+  }
+
+  const remove = async (p: Post) => {
+    if (!window.confirm('删除这条帖子？删除后不可恢复。')) return
+    setMenuFor(null)
+    try {
+      await api('/api/posts/delete', { method: 'POST', body: { id: p.id } })
+      showToast('已删除')
+      await load()
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : '删除失败')
     }
   }
 
@@ -150,6 +196,42 @@ export default function Forum({ me }: Props) {
                 </span>
                 <span className="text-sm font-bold text-rose-950">{p.authorName}</span>
                 <span className="ml-auto text-[10px] text-rose-900/35">{timeAgo(p.at)}</span>
+                <div className="relative">
+                  <button
+                    onClick={() => setMenuFor(menuFor === p.id ? null : p.id)}
+                    className="px-1.5 text-sm text-rose-900/35 transition hover:text-rose-500"
+                    aria-label="更多操作"
+                  >
+                    ⋯
+                  </button>
+                  {menuFor === p.id && (
+                    <div className="absolute right-0 top-7 z-10 w-28 overflow-hidden rounded-xl border border-rose-100 bg-white text-xs shadow-lg">
+                      {p.authorId === me.id ? (
+                        <button
+                          onClick={() => void remove(p)}
+                          className="block w-full px-3 py-2 text-left text-rose-500 transition hover:bg-rose-50"
+                        >
+                          🗑 删除帖子
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => void report(p)}
+                            className="block w-full px-3 py-2 text-left text-rose-950/70 transition hover:bg-rose-50"
+                          >
+                            🚩 举报
+                          </button>
+                          <button
+                            onClick={() => void block(p)}
+                            className="block w-full px-3 py-2 text-left text-rose-950/70 transition hover:bg-rose-50"
+                          >
+                            🚫 拉黑 TA
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
               {p.text && (
                 <p className="whitespace-pre-wrap text-sm leading-relaxed text-rose-950/85">
@@ -208,6 +290,19 @@ export default function Forum({ me }: Props) {
           )
         })}
       </div>
+
+      <p className="mt-6 text-center text-[10px] leading-relaxed text-rose-900/30">
+        广场内容全网可见 · 违规内容可举报，3 人举报自动下架 ·{' '}
+        <a href="./privacy.html" target="_blank" className="underline">
+          隐私政策
+        </a>
+      </p>
+
+      {toast && (
+        <div className="fixed left-1/2 top-6 z-50 -translate-x-1/2 rounded-full bg-rose-950/85 px-4 py-2 text-xs text-white shadow-lg">
+          {toast}
+        </div>
+      )}
     </section>
   )
 }

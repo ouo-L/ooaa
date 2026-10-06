@@ -30,8 +30,10 @@ const defaultData = {
   tokens: {}, // token -> userId
   friendReqs: [], // {id, fromId, toId, at}
   spaces: {}, // spaceId -> {id, members:[uid,uid], state}
-  posts: [], // {id, authorId, authorName, authorAvatar, text, photo?, at, likes:[uid], comments:[]}
+  posts: [], // {id, authorId, authorName, authorAvatar, text, photo?, at, likes:[uid], comments:[], hidden?:bool}
   pushSubs: {}, // userId -> [subscription]
+  reports: [], // {id, postId, reporterId, reason, at}
+  blocks: {}, // userId -> [blockedUserId]（双向屏蔽内容）
 }
 
 function loadData() {
@@ -294,7 +296,21 @@ async function handleApi(req, res, pathname) {
 
   /* --- 论坛（全网公开） --- */
   if (pathname === '/api/posts' && req.method === 'GET') {
-    const list = [...data.posts].sort((a, b) => b.at - a.at).slice(0, 100)
+    // 未登录也能看，登录用户过滤双向拉黑的内容
+    const u = authUser(req)
+    const myBlocks = new Set(u ? data.blocks[u.id] || [] : [])
+    const blockedMe = new Set(
+      u
+        ? Object.entries(data.blocks)
+            .filter(([, list]) => Array.isArray(list) && list.includes(u.id))
+            .map(([uid2]) => uid2)
+        : [],
+    )
+    const list = [...data.posts]
+      .filter((p) => !p.hidden)
+      .filter((p) => !myBlocks.has(p.authorId) && !blockedMe.has(p.authorId))
+      .sort((a, b) => b.at - a.at)
+      .slice(0, 100)
     return json(res, 200, { posts: list })
   }
   if (pathname === '/api/posts' && req.method === 'POST') {
@@ -351,6 +367,46 @@ async function handleApi(req, res, pathname) {
     scheduleSave()
     if (post.authorId !== u.id) pushTo(post.authorId, '💬 有人评论了你', `${u.name}：${text}`)
     return json(res, 200, { ok: true, comments: post.comments })
+  }
+
+  if (pathname === '/api/posts/report' && req.method === 'POST') {
+    const u = authUser(req)
+    if (!u) return json(res, 401, { error: '未登录' })
+    const post = data.posts.find((p) => p.id === String(body?.id))
+    if (!post || post.hidden) return json(res, 404, { error: '帖子不存在' })
+    if (post.authorId === u.id) return json(res, 400, { error: '不能举报自己的帖子' })
+    if (data.reports.some((r) => r.postId === post.id && r.reporterId === u.id))
+      return json(res, 400, { error: '你已举报过这条帖子' })
+    const reason = String(body?.reason || '其他').slice(0, 50)
+    data.reports.push({ id: crypto.randomUUID(), postId: post.id, reporterId: u.id, reason, at: Date.now() })
+    // 3 个不同用户举报 → 自动下架
+    const reporters = new Set(data.reports.filter((r) => r.postId === post.id).map((r) => r.reporterId))
+    if (reporters.size >= 3) post.hidden = true
+    scheduleSave()
+    return json(res, 200, { ok: true, message: '已收到举报，感谢监督' })
+  }
+  if (pathname === '/api/posts/delete' && req.method === 'POST') {
+    const u = authUser(req)
+    if (!u) return json(res, 401, { error: '未登录' })
+    const idx = data.posts.findIndex((p) => p.id === String(body?.id))
+    if (idx < 0) return json(res, 404, { error: '帖子不存在' })
+    if (data.posts[idx].authorId !== u.id) return json(res, 403, { error: '只能删除自己的帖子' })
+    data.posts.splice(idx, 1)
+    scheduleSave()
+    return json(res, 200, { ok: true })
+  }
+  if (pathname === '/api/user/block' && req.method === 'POST') {
+    const u = authUser(req)
+    if (!u) return json(res, 401, { error: '未登录' })
+    const targetId = String(body?.userId || '')
+    if (!targetId || targetId === u.id) return json(res, 400, { error: '无效对象' })
+    if (!findUser(targetId)) return json(res, 404, { error: '用户不存在' })
+    const list = (data.blocks[u.id] = data.blocks[u.id] || [])
+    const i = list.indexOf(targetId)
+    if (i >= 0) list.splice(i, 1)
+    else list.push(targetId)
+    scheduleSave()
+    return json(res, 200, { ok: true, blocked: i < 0 })
   }
 
   return json(res, 404, { error: '接口不存在' })

@@ -104,6 +104,13 @@ export default function Auth({ onAuth }: Props) {
         >
           {busy ? '请稍候…' : mode === 'login' ? '进入 💫' : '创建账号 💫'}
         </button>
+
+        <p className="mt-3 text-center text-[10px] text-rose-900/35">
+          注册即表示同意
+          <a href="./privacy.html" target="_blank" className="underline">
+            《隐私政策》
+          </a>
+        </p>
       </div>
     </div>
   )
